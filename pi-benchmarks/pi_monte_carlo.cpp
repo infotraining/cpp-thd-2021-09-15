@@ -213,7 +213,7 @@ double calc_pi_multithread_with_padding(counter_t throws)
     auto hardware_threads_count = max(thread::hardware_concurrency(), 1u);
     auto no_of_throws = throws / hardware_threads_count;
 
-    struct alignas(128) AlignedValue
+    struct alignas(std::hardware_destructive_interference_size) AlignedValue
     {
         counter_t value;
     };
@@ -275,7 +275,6 @@ double calc_pi_parallel_stl(counter_t throws)
     auto hits = std::transform_reduce(std::execution::par, results.begin(), results.end(), 0ULL, std::plus{}, [](auto n) { return calc_hits(n);});
 
     return static_cast<double>(hits) / throws;
-
 }
 
 constexpr int N = 1'000'000;

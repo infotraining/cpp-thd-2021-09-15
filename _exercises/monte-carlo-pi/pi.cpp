@@ -15,7 +15,8 @@ void calc_hits(long num_of_iteration, long& hits)
 {
     std::mt19937_64 gen {std::random_device {}()};
     std::uniform_real_distribution<double> rnd_gen(-1.0, 1.0);
-    
+
+    long local_hits = 0;
     double x;
     double y;
     for (long n = 0; n < num_of_iteration; ++n)
@@ -23,8 +24,9 @@ void calc_hits(long num_of_iteration, long& hits)
         x = rnd_gen(gen);
         y = rnd_gen(gen);
         if (x * x + y * y < 1)
-            hits++;
-    }    
+            local_hits++;
+    }
+    hits = local_hits;
 }
 
 int main()
