@@ -1,5 +1,12 @@
 # Szkolenie - Programowanie wielowątkowe w C++ #
 
+## Linki
+
+### Biblioteki
+
+* Abseil - https://abseil.io/
+* Folly - https://github.com/facebook/folly
+
 ## Dokumentacja
 
 * https://infotraining.bitbucket.io/cpp-thd
