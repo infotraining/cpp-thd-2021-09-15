@@ -1,3 +1,4 @@
+#include "thread_safe_queue.hpp"
 #include <cassert>
 #include <chrono>
 #include <functional>
@@ -5,7 +6,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-#include "thread_safe_queue.hpp"
 
 using namespace std::literals;
 
@@ -25,74 +25,135 @@ void background_work(size_t id, const std::string& text, std::chrono::millisecon
 
 using Task = std::function<void()>;
 
-static Task end_of_work{};
+static Task end_of_work {};
 
-class ThreadPool
+namespace ver_1_0
 {
-    std::vector<std::thread> threads_;
-    ThreadSafeQueue<Task> q_tasks_;
-
-    void run()
+    class ThreadPool
     {
-        while(true)
+        std::vector<std::thread> threads_;
+        ThreadSafeQueue<Task> q_tasks_;
+
+        void run()
         {
-            Task task;
-            q_tasks_.pop(task); // waits for task
+            while (true)
+            {
+                Task task;
+                q_tasks_.pop(task); // waits for task
 
-            if (sepuku_task(task))    
-                return;
+                if (sepuku_task(task))
+                    return;
 
-            task(); // executes popped task
+                task(); // executes popped task
+            }
         }
-    }
 
-    bool sepuku_task(Task& t)
-    {
-        return t == nullptr;
-    }
-public:
-    ThreadPool(size_t size)
-        : threads_(size)
-    {
-        for(auto& thd : threads_)
+        bool sepuku_task(Task& t)
         {
-            thd = std::thread{[this] { run(); }};
+            return t == nullptr;
         }
-    }
 
-    ThreadPool(const ThreadPool&) = delete;
-    ThreadPool& operator=(const ThreadPool&) = delete;
+    public:
+        ThreadPool(size_t size)
+            : threads_(size)
+        {
+            for (auto& thd : threads_)
+            {
+                thd = std::thread {[this]
+                    { run(); }};
+            }
+        }
 
-    ~ThreadPool()
+        ThreadPool(const ThreadPool&) = delete;
+        ThreadPool& operator=(const ThreadPool&) = delete;
+
+        ~ThreadPool()
+        {
+            // send poisoning pills
+            for (size_t i = 0; i < threads_.size(); ++i)
+                q_tasks_.push(end_of_work);
+
+            for (auto& thd : threads_)
+                thd.join();
+        }
+
+        void submit(Task task)
+        {
+            q_tasks_.push(task);
+        }
+    };
+}
+
+namespace ver_1_1
+{
+    class ThreadPool
     {
-        // send poisoning pills
-        for(size_t i = 0; i < threads_.size(); ++i)
-            q_tasks_.push(end_of_work); 
+        std::vector<std::thread> threads_;
+        ThreadSafeQueue<Task> q_tasks_;
+        bool is_done_ = false;
 
-        for(auto& thd : threads_)
-            thd.join();
-    }
+        void run()
+        {
+            while (true)
+            {
+                Task task;
+                q_tasks_.pop(task); // waits for task
 
-    void submit(Task task)
-    {
-        q_tasks_.push(task);
-    }
-};
+                task(); // executes popped task
+                
+                if (is_done_)
+                    return;
+            }
+        }
+
+    public:
+        ThreadPool(size_t size)
+            : threads_(size)
+        {
+            for (auto& thd : threads_)
+            {
+                thd = std::thread {[this]
+                    { run(); }};
+            }
+        }
+
+        ThreadPool(const ThreadPool&) = delete;
+        ThreadPool& operator=(const ThreadPool&) = delete;
+
+        ~ThreadPool()
+        {
+            for(size_t i = 0; i < threads_.size(); ++i)
+                submit([this] { is_done_ = true; });
+
+            for (auto& thd : threads_)
+                thd.join();
+        }
+
+        void submit(Task task)
+        {
+            q_tasks_.push(task);
+        }
+    };
+}
 
 int main()
 {
+    using namespace ver_1_1;
+
     std::cout << "Main thread starts..." << std::endl;
     const std::string text = "Hello Threads";
 
-    std::thread thd1{[&] {background_work(1, text, 10ms); }};
+    std::thread thd1 {[&]
+        { background_work(1, text, 10ms); }};
     thd1.join();
 
     ThreadPool thread_pool(4);
-    thread_pool.submit([&] {background_work(1, text, 10ms); });
+    thread_pool.submit([&]
+        { background_work(1, text, 10ms); });
 
-    for(int i = 0; i < 100; ++i)
-        thread_pool.submit([i, &text] {background_work(i, text, 5ms); });
-
+    for (int i = 0; i < 100; ++i)
+        thread_pool.submit([i, &text]
+            { background_work(i, text, 5ms); });
 
     std::cout << "Main thread ends..." << std::endl;
 }
