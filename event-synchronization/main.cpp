@@ -1,8 +1,10 @@
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <iostream>
+#include <mutex>
 #include <numeric>
 #include <random>
 #include <string>
@@ -50,36 +52,45 @@ namespace BusyWait
 }
 
 class Data
+{
+    std::vector<int> data_;
+    bool is_ready_ = false;
+    std::mutex mtx_is_ready_;
+    std::condition_variable cv_data_ready_;
+
+public:
+    void read()
     {
-        std::vector<int> data_;
-        bool is_ready_ = false;
+        std::cout << "Start reading..." << std::endl;
+        data_.resize(100);
 
-    public:
-        void read()
-        {
-            std::cout << "Start reading..." << std::endl;
-            data_.resize(100);
+        std::random_device rnd;
+        std::generate(begin(data_), end(data_), [&rnd] { return rnd() % 1000; });
+        std::this_thread::sleep_for(2s);
+        std::cout << "End reading..." << std::endl;
 
-            std::random_device rnd;
-            std::generate(begin(data_), end(data_), [&rnd]
-                { return rnd() % 1000; });
-            std::this_thread::sleep_for(2s);
-            std::cout << "End reading..." << std::endl;
+        { 
+            std::lock_guard<std::mutex> lk {mtx_is_ready_};  // ACQUIRE
+            is_ready_ = true;
+        } // RELEASE
+        cv_data_ready_.notify_all();
+    }
 
-            is_ready_ = true; 
-        }
+    void process(int id)
+    {
+        std::unique_lock<std::mutex> lk{mtx_is_ready_};
+        // while (!is_ready_)
+        // {
+        //     cv_data_ready_.wait(lk);
+        // }
+        cv_data_ready_.wait(lk, [this] { return is_ready_; });
+        lk.unlock();
 
-        void process(int id)
-        {
-            while (!is_ready_)
-            {
-            }
+        long sum = std::accumulate(begin(data_), end(data_), 0L);
 
-            long sum = std::accumulate(begin(data_), end(data_), 0L);
-
-            std::cout << "Id: " << id << "; Sum: " << sum << std::endl;
-        }
-    };
+        std::cout << "Id: " << id << "; Sum: " << sum << std::endl;
+    }
+};
 
 int main()
 {
