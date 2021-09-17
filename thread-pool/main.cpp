@@ -6,6 +6,8 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <future>
+#include <random>
 
 using namespace std::literals;
 
@@ -23,7 +25,24 @@ void background_work(size_t id, const std::string& text, std::chrono::millisecon
     std::cout << "bw#" << id << " is finished..." << std::endl;
 }
 
+int calculate_square(int x)
+{
+    std::cout << "Starting calculation for " << x << " in " << std::this_thread::get_id() << std::endl;
+
+    std::random_device rd;
+    std::uniform_int_distribution<> distr(100, 5000);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(distr(rd)));
+
+    if (x % 3 == 0)
+        throw std::runtime_error("Error#3");
+
+    return x * x;
+}
+
 using Task = std::function<void()>;
+
+//using FollyTask = folly::Function<void()>;
 
 static Task end_of_work {};
 
@@ -129,9 +148,16 @@ namespace ver_1_1
                 thd.join();
         }
 
-        void submit(Task task)
+        template <typename Callable>
+        auto submit(Callable&& task)
         {
-            q_tasks_.push(task);
+            using ResultT = decltype(task());
+
+            auto pt = std::make_shared<std::packaged_task<ResultT()>>(std::forward<Callable>(task));
+            auto fresult = pt->get_future();
+            q_tasks_.push([pt] { (*pt)(); });
+
+            return fresult;
         }
     };
 }
@@ -148,6 +174,7 @@ int main()
     thd1.join();
 
     ThreadPool thread_pool(4);
+
     thread_pool.submit([&]
         { background_work(1, text, 10ms); });
 
@@ -155,5 +182,25 @@ int main()
         thread_pool.submit([i, &text]
             { background_work(i, text, 5ms); });
 
-    std::cout << "Main thread ends..." << std::endl;
+    std::vector<std::tuple<int, std::future<int>>> f_squares;
+
+    for(int i = 1; i < 10; ++i)
+    {
+        f_squares.emplace_back(i, thread_pool.submit([i] { return calculate_square(i); }));
+    }
+
+    for(auto& fs : f_squares)
+    {
+        auto x = std::get<0>(fs);
+
+        try
+        {
+            auto sq = std::get<1>(fs).get();
+            std::cout << x << "*" << x << " = " << sq << std::endl;
+        }
+        catch(const std::exception& e)
+        {
+            std::cout << x << "*" << x << " = " << e.what() << std::endl;
+        }        
+    }
 }

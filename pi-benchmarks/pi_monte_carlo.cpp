@@ -89,7 +89,7 @@ void calc_hits_by_local_counter(counter_t n, counter_t& hits)
     hits += counter;
 }
 
-void calc_hits_by_ref_intenstive_incr_with_mutex(counter_t n, counter_t& hits, mutex& mtx)
+void calc_hits_by_ref_intensive_incr_with_mutex(counter_t n, counter_t& hits, mutex& mtx)
 {
     RandomEngine<double> rnd;
 
@@ -157,7 +157,7 @@ double calc_pi_multithread_with_mutex(counter_t throws)
     for (unsigned int i = 0; i < hardware_threads_count; ++i)
     {
         threads.emplace_back([&hits, &mtx, no_of_throws] {
-            calc_hits_by_ref_intenstive_incr_with_mutex(no_of_throws, hits, mtx);
+            calc_hits_by_ref_intensive_incr_with_mutex(no_of_throws, hits, mtx);
         });
     }
 
@@ -263,7 +263,8 @@ double calc_pi_multithread_with_futures(counter_t throws)
         future_hits[i] = std::async(std::launch::async, [no_of_throws] { return calc_hits(no_of_throws); });
     }
 
-    return (accumulate(future_hits.begin(), future_hits.end(), 0.0, [](auto& hits, auto& f) { return hits += f.get(); }) / throws) * 4;
+    return (accumulate(future_hits.begin(), future_hits.end(), 0.0, 
+            [](auto& hits, auto& f) { return hits += f.get(); }) / throws) * 4;
 }
 
 double calc_pi_parallel_stl(counter_t throws)
@@ -272,7 +273,8 @@ double calc_pi_parallel_stl(counter_t throws)
     const auto no_of_throws = throws / hardware_threads_count;
 
     std::vector<counter_t> results(hardware_threads_count, no_of_throws);
-    auto hits = std::transform_reduce(std::execution::par, results.begin(), results.end(), 0ULL, std::plus{}, [](auto n) { return calc_hits(n);});
+    auto hits = std::transform_reduce(std::execution::par, results.begin(), results.end(), 0ULL, std::plus{}, 
+                    [](auto n) { return calc_hits(n);});
 
     return static_cast<double>(hits) / throws;
 }
@@ -307,11 +309,11 @@ TEST_CASE("Monte Carlo Pi")
         return calc_pi_multithread_with_padding(N);
     };
 
-    // BENCHMARK("futures") {
-    //     return calc_pi_multithread_with_futures(N);
-    // };
+    BENCHMARK("futures") {
+        return calc_pi_multithread_with_futures(N);
+    };
 
-    // BENCHMARK("ParallelSTL") {
-    //     return calc_pi_parallel_stl(N);
-    // };
+    BENCHMARK("ParallelSTL") {
+        return calc_pi_parallel_stl(N);
+    };
 }
