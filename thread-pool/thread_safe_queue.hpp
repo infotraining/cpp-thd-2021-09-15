@@ -54,7 +54,7 @@ public:
         if (!lk.owns_lock() || q_.empty())
             return false;
 
-        item = std::move(q_.front();
+        item = std::move(q_.front());
         q_.pop();
         return true;
     }
