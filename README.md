@@ -1,5 +1,9 @@
 # Szkolenie - Programowanie wielowątkowe w C++ #
 
+## Ankieta
+
+* https://forms.gle/LjKD973H44KUUDbs6
+
 ## Linki
 
 ### Biblioteki
